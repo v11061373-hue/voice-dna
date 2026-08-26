@@ -1,0 +1,8 @@
+# 表达基因（Voice DNA）依赖（直接依赖，版本为实测安装版）
+numpy==2.5.1            # data_analyst 异常检测/四分位
+langgraph==1.2.11       # 编排（自写 StateGraph）
+httpx==0.28.1           # trend_hunter B站热门 + style_mimic 直连 DeepSeek
+chainlit==2.12.0        # 前端对话流（README 调研稳定版）
+langchain-core==1.6.0   # chainlit LangchainCallbackHandler 直接依赖
+fastmcp==3.4.5          # MCP server/client（FastMCP in-memory 直连）
+pytest==9.1.1           # 测试

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+
+# 环境变量（含 DEEPSEEK_API_KEY）
+.env
+.env.*
+
+# Chainlit
+.chainlit/.files/
+.chainlit/.langchain.db
+
+# 系统
+.DS_Store
+Thumbs.db
