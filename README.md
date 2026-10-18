@@ -50,7 +50,12 @@ trend_hunter ──► topic_planner ──► style_mimic ──► script_writ
 | YouTube | `/feed/trending` 页面 `ytInitialData` | ✅ 真实现（海外网络） |
 | 抖音 / 微博 | 登录态源（契约预留） | ◻️ 接登录态即产数据 |
 
-> YouTube 抓取为 keyless 真实现（不调 API，直抓页面内嵌 JSON），但依赖海外网络——`youtube.com` 需可达；国内环境返回空。
+各平台数据源高度异构，差异化抓取与解析，收敛到统一 `TrendItem` 数据接口：
+
+- **B站**：keyless API，但请求不带浏览器 UA 会被直接 412，需伪造 UA。
+- **YouTube**：抓 `/feed/trending` 页面内嵌的 `ytInitialData`，递归遍历渲染器树定位内容项（依赖海外网络，国内环境返回空）。
+- **抖音 / 微博**：需登录态，缺失时返回空数据（契约预留，接登录态即产数据）。
+
 > 加新平台只需继承 `Scraper` 并设 `name`，注册表 `_SCRAPERS` 经 `__subclasses__` 自动发现。
 
 ## 六 Agent
@@ -59,7 +64,7 @@ trend_hunter ──► topic_planner ──► style_mimic ──► script_writ
 |---|---|---|---|---|
 | `trend_hunter` 热点猎人 | 抓平台热点 | `account_profile` | `trends[]` | 4 平台统一 TrendItem 契约（B站/YouTube keyless） |
 | `topic_planner` 选题策划 | 加权打分排序 | `trends[]` | `topics[{title,score,reason}]` | 4 因子加权（40/30/20/10） |
-| `style_mimic` 风格模仿 ⭐ | 抽表达 DNA（题眼） | `profile` + `topics` | `style_card`（7 字段） | DeepSeek 结构化抽取（无 key 降级通用卡） |
+| `style_mimic` 风格模仿 ⭐ | 抽表达 DNA（题眼） | `profile` + `topics` | `style_card`（persona/voice/catchphrases 等 7 字段） | DeepSeek 结构化抽取，三层兜底（prompt 约束 / markdown 剥离 / 缺字段标未知），无 key 降级通用卡 |
 | `script_writer` 脚本文案 | 分镜脚本 | `style_card` | `{body, scenes[], duration}` | 五段式 HOOK→CTA |
 | `publish_optimizer` 发布优化 | 平台/时间/标签 | `script` | `{platform, best_time, tags...}` | 启发式规则 |
 | `data_analyst` 数据分析 | 对比基准 + 异常检测 | `metrics` | `{report, metrics, benchmark, anomalies}` | IQR 1.5 异常检测（合成数据验证） |
@@ -144,10 +149,12 @@ async def call_tool(tool_name: str, **kwargs):
 
 两条条件边决定流水线走向：
 
-- **脚本质量门**：`script.body` 空 → HALT 进人工兜底；过短 → WARN；达标 → 继续
+- **脚本质量门**：`script.body` 空 → HALT 进人工兜底；正文不足 30 字符 → WARN；达标 → 继续
 - **分析质量门**：`analytics.report` 空 → HALT；缺 `metrics`/`benchmark` → WARN；全有 → END
 
 质量门取最坏结果 `HALT > WARN > PASS`。
+
+坚持「能确定性的不用 LLM」：脚本创作走五段式模板填充、数据分析走配置降级演示序列，LLM 只集中在风格抽取这一核心环节，显著降低推理成本并提升可测性。
 
 ## 测试
 
@@ -157,6 +164,13 @@ python -m pytest -q
 ```
 
 覆盖：7 节点编排编译、六步线性跑通、MCP 真接往返、两质量门路由、6 个 tool 单元测试（含 B站 UA、YouTube ytInitialData 解析）。
+
+## 商业落地
+
+技术能力落地真实业务场景，验证 Agent 内容生产的商业闭环：
+
+- 用 `style_mimic` 抽取淘宝 12 条真实标题的表达 DNA，复用变体至拼多多、闲鱼、京东等五平台，产出含标题公式、定价锚点、客服话术的网店模仿策略。
+- 再次调用 DeepSeek 生成小红书 3 篇引流笔记与 6 场景评论话术，支撑副业冷启动。
 
 ## License
 
