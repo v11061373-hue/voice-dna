@@ -7,6 +7,8 @@
 
 ## 一、新增 md 文件清单
 
+> 归档位置：PLAN 在 `docs/plans/`，HANDOFF 在 `docs/handoffs/p4/` 与 `docs/handoffs/p5/`。
+
 | 文件 | 阶段 | 一句话 |
 |------|------|--------|
 | `PLAN-P4.md` | P4 方案 | 专家 Agent + 五门网关 + 数据源可选用 + 个人账号 + Concierge |
@@ -105,8 +107,8 @@
 
 ## 四、简历版（复制即用）
 
-见 `RESUME.md`。
+见同目录 [`RESUME.md`](RESUME.md)。
 
 ## 五、GitHub 简介版（复制即用）
 
-见 `GITHUB-README.md`。
+见仓库根目录 [`README.md`](../README.md)。
