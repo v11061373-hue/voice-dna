@@ -126,6 +126,21 @@ uvicorn web_server:server --port 8082      # 逐步执行 http://localhost:8082
 
 前端输入账号画像（如「美妆博主」）跑六步流水线，每步中间产物可点开查看；数据源 chip 栏常驻可选，个人账号面板多供应商切换，候选视频可一键转录回流。
 
+## 界面
+
+**交互页** —— 左栏数据源列表 + 会话历史 + 个人账号，右栏六步流水线逐节点展示：
+
+<div align="center">
+  <img src="docs/images/interaction-page.png" alt="交互页" width="92%">
+</div>
+
+**多供应商切换** —— 「个人账号」面板下拉即切 DeepSeek / Qwen / GLM / Kimi / 混元 / 自定义，key 只落内存不落盘：
+
+<div align="center">
+  <img src="docs/images/llm-switch-1.png" alt="多供应商切换 · 主供应商" width="44%">
+  <img src="docs/images/llm-switch-2.png" alt="多供应商切换 · LLM-judge 独立供应商" width="44%">
+</div>
+
 ## 项目结构
 
 ```
@@ -166,6 +181,7 @@ uvicorn web_server:server --port 8082      # 逐步执行 http://localhost:8082
     ├── plans/                  # PLAN-P4 / PLAN-P5 / PLAN / PRD
     ├── handoffs/p4/            # HANDOFF-P4-*.md
     ├── handoffs/p5/            # HANDOFF-P5-*.md
+    ├── images/                 # 界面截图（交互页 / 多供应商切换）
     ├── PROJECT-SUMMARY.md      # 项目全景总结
     └── RESUME.md               # 简历项目经历
 ```
