@@ -147,6 +147,32 @@ td{font-variant-numeric:tabular-nums}
 .field option{background:var(--surface2);color:var(--text)}
 .sec{font-size:12px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--border)}
 .panel .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* 插件：数据源列表 + 管理弹窗 */
+.srclist{display:flex;flex-direction:column;gap:2px}
+.srcitem{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:13.5px;color:var(--muted)}
+.srcitem .s-ico{font-size:13px}
+.srcitem .s-name{flex:1;font-weight:500;cursor:pointer}
+.srcitem .s-name:hover{color:var(--text)}
+.switch{position:relative;display:inline-block;width:30px;height:17px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.switch .sl{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--border-strong);border-radius:999px;transition:.15s;cursor:pointer}
+.switch .sl::before{content:'';position:absolute;left:2px;top:2px;width:11px;height:11px;background:var(--faint);border-radius:50%;transition:.15s}
+.switch input:checked + .sl{background:var(--accent);border-color:var(--accent)}
+.switch input:checked + .sl::before{transform:translateX(13px);background:#fff}
+.s-status{font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px}
+.s-status.ok{color:var(--green);background:rgba(63,185,80,.12)}
+.s-status.no{color:var(--amber);background:rgba(210,153,34,.14)}
+.s-status.none{color:var(--faint)}
+.schip.manage{margin-left:auto;border-style:dashed;color:var(--muted)}
+.srcrow{border-bottom:1px solid var(--border);padding:10px 0}
+.srcrow:last-child{border-bottom:0}
+.srcrow-hd{display:flex;align-items:center;gap:10px}
+.srcrow-hd .s-ico{font-size:15px}
+.srcrow-hd .s-meta{flex:1;min-width:0}
+.srcrow-hd .s-name{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+.srcrow-hd .s-desc{color:var(--muted);font-size:12px;margin-top:2px}
+.srcrow .loginbox{margin:10px 0 2px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
 </style>
 </head>
 <body>
@@ -164,7 +190,7 @@ td{font-variant-numeric:tabular-nums}
     <div class="navgroup">会话历史</div>
     <div id="sessions"><div class="sessions-empty">暂无会话</div></div>
     <div class="navgroup">插件</div>
-    <div class="navitem disabled" title="plugins/sources.json 或 plugins/scrapers/ 文件接入">📡 数据源（文件接入）</div>
+    <div id="source-list" class="srclist"></div>
     <div id="exttools"><div class="sessions-empty">无外部 Skill</div></div>
     <div class="sidebar-footer">
       <div class="navitem" data-node="config" onclick="openConfig()">👤 个人账号</div>
@@ -206,6 +232,17 @@ td{font-variant-numeric:tabular-nums}
   <div class="field"><label>Judge Base URL</label><input id="c-judge_base_url" placeholder="留空 = 复用主"></div>
   <div class="field"><label>Judge API Key <span class="st" id="c-judge_key_hint"></span></label><input id="c-judge_key" type="password" placeholder="留空 = 复用主 key"></div>
   <div class="foot"><button class="btn" onclick="closeConfig()">取消</button><button class="btn primary" onclick="saveConfig()">保存</button></div>
+</div>
+
+<div class="mask" id="smask" hidden onclick="closeSourceManager()"></div>
+<div class="panel" id="spanel" hidden>
+  <h2>🔌 数据源管理</h2>
+  <div class="sub">勾选启用的数据源；需登录的源贴 cookie 或扫码接通后重跑。</div>
+  <div id="source-rows"></div>
+  <div class="foot">
+    <button class="btn" onclick="closeSourceManager()">关闭</button>
+    <button class="btn primary" onclick="managerRerun()">保存并重跑</button>
+  </div>
 </div>
 
 <script>
@@ -300,6 +337,7 @@ let attachment = null;        // {name, text} | null（md 附件）
 // —— 数据源 chip 栏（A2）——
 const LS_KEY = 'vd.enabledSources';
 const SOURCE_LABELS = {bilibili:'B站', youtube:'YouTube', douyin:'抖音', weibo:'微博', search:'🔍 搜索召回'};
+const SRC_ICONS = {bilibili:'📺', youtube:'▶️', douyin:'🎵', weibo:'🔁', search:'🔍'};
 let SOURCES = [];             // /api/sources 能力清单
 let ENABLED = new Set();      // 选中源名
 function renderSources(){
@@ -309,12 +347,30 @@ function renderSources(){
   bar.innerHTML = SOURCES.map(s=>{
     const on = ENABLED.has(s.name);
     return `<span class="schip${on?' on':''}" data-src="${esc(s.name)}" onclick="toggleSource('${esc(s.name)}')">${esc(SOURCE_LABELS[s.name]||s.name)}</span>`;
-  }).join('');
+  }).join('') + '<span class="schip manage" onclick="openSourceManager()">⚙ 管理</span>';
 }
 function toggleSource(name){
   if(ENABLED.has(name)) ENABLED.delete(name); else ENABLED.add(name);
   localStorage.setItem(LS_KEY, JSON.stringify([...ENABLED]));
   renderSources();
+  renderSourceList();
+}
+function srcStatusBadge(s){
+  if(!s.requires_auth) return '<span class="s-status none">免登录</span>';
+  return '<span class="s-status no">需登录</span>';
+}
+function renderSourceList(){
+  const box = document.getElementById('source-list');
+  if(!SOURCES.length){ box.innerHTML='<div class="sessions-empty">暂无数据源</div>'; return; }
+  box.innerHTML = SOURCES.map(s=>{
+    const on = ENABLED.has(s.name);
+    return `<div class="srcitem">
+      <span class="s-ico">${esc(SRC_ICONS[s.name]||'📡')}</span>
+      <span class="s-name" onclick="openSourceManager('${esc(s.name)}')">${esc(SOURCE_LABELS[s.name]||s.name)}</span>
+      ${srcStatusBadge(s)}
+      <label class="switch"><input type="checkbox" ${on?'checked':''} onchange="toggleSource('${esc(s.name)}')"><span class="sl"></span></label>
+    </div>`;
+  }).join('');
 }
 async function loadSources(){
   try{ SOURCES = await (await fetch('/api/sources')).json(); }catch(e){ SOURCES=[]; }
@@ -322,8 +378,10 @@ async function loadSources(){
   if(saved){ try{ ENABLED = new Set(JSON.parse(saved)); }catch(e){ ENABLED = new Set(); } }
   else ENABLED = new Set(SOURCES.filter(s=>s.default_enabled).map(s=>s.name));
   renderSources();
+  renderSourceList();
 }
-// —— cookie 登录（A4 统一入口）——
+// —— cookie 登录 + 数据源管理（A4 统一入口，收敛进弹窗）——
+let pendingProfile = null;
 async function missingCookie(){
   try{
     const d = await (await fetch('/api/cookie')).json();
@@ -331,32 +389,68 @@ async function missingCookie(){
     return SOURCES.filter(s=>ENABLED.has(s.name) && s.requires_auth && st[s.name]!=='ok');
   }catch(e){ return []; }
 }
-function renderLoginGuide(missing, profile){
-  const s = missing[0], label = SOURCE_LABELS[s.name]||s.name;
-  addAgent(`🔐 数据源「${label}」需登录。${esc(s.auth_hint||'')}`);
-  thread.insertAdjacentHTML('beforeend',
-    `<div class="card"><div class="head"><span class="icon">🔐</span><span class="name">登录 ${esc(label)}</span></div>
-     <div class="body">
-       <div class="line">${esc(s.auth_hint||'')}${s.login_url?'（登录页：'+esc(s.login_url)+'）':''}</div>
-       <textarea id="cookie-input" class="cookie-input" placeholder="在浏览器登录后，粘贴该站 cookie 到这里"></textarea>
-       <div class="actions"><button class="btn primary" onclick="submitCookie('${esc(s.name)}', '${esc(profile)}')">手动粘贴并重跑</button><button class="btn" onclick="scanCookie('${esc(s.name)}', '${esc(profile)}')">自动扫码</button><button class="btn" onclick="skipLogin('${esc(profile)}')">跳过（该源返回空）</button></div>
-     </div></div>`);
-  scroll();
+async function openSourceManager(highlight){
+  pendingProfile = document.getElementById('profile').value.trim() || pendingProfile;
+  let st = {};
+  try{ const d = await (await fetch('/api/cookie')).json(); st = d.statuses || {}; }catch(e){}
+  const rows = document.getElementById('source-rows');
+  rows.innerHTML = SOURCES.map(s=>{
+    const on = ENABLED.has(s.name);
+    const ok = st[s.name]==='ok';
+    const stBadge = !s.requires_auth ? '<span class="s-status none">免登录</span>' : (ok?'<span class="s-status ok">已登录</span>':'<span class="s-status no">未登录</span>');
+    let login = '';
+    if(s.requires_auth && !ok){
+      login = `<div class="loginbox">
+        <div class="line">${esc(s.auth_hint||'登录后粘贴 cookie')}${s.login_url?'（登录页：'+esc(s.login_url)+'）':''}</div>
+        <textarea class="cookie-input" id="mcookie-${esc(s.name)}" placeholder="粘贴 ${esc(SOURCE_LABELS[s.name]||s.name)} 的 cookie"></textarea>
+        <div class="actions">
+          <button class="btn primary" onclick="managerLogin('${esc(s.name)}')">手动粘贴并保存</button>
+          <button class="btn" onclick="managerScan('${esc(s.name)}')">自动扫码</button>
+          <button class="btn" onclick="managerSkip('${esc(s.name)}')">跳过此源</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="srcrow">
+      <div class="srcrow-hd">
+        <span class="s-ico">${esc(SRC_ICONS[s.name]||'📡')}</span>
+        <div class="s-meta">
+          <div class="s-name">${esc(SOURCE_LABELS[s.name]||s.name)} ${stBadge}</div>
+          <div class="s-desc">${s.requires_auth ? (s.auth_hint||'需登录态') : '免登录直采'}</div>
+        </div>
+        <label class="switch"><input type="checkbox" ${on?'checked':''} onchange="toggleSource('${esc(s.name)}')"><span class="sl"></span></label>
+      </div>
+      ${login}
+    </div>`;
+  }).join('');
+  document.getElementById('smask').hidden = false;
+  document.getElementById('spanel').hidden = false;
 }
-async function submitCookie(name, profile){
-  const v = document.getElementById('cookie-input').value.trim();
-  if(!v){ addAgent('请先粘贴 cookie'); return; }
+function closeSourceManager(){
+  document.getElementById('smask').hidden = true;
+  document.getElementById('spanel').hidden = true;
+}
+async function managerLogin(name){
+  const v = document.getElementById('mcookie-'+name).value.trim();
+  if(!v){ alert('先粘贴 cookie'); return; }
   await fetch('/api/cookie', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:name, cookie:v})});
-  addAgent('已保存 '+esc(SOURCE_LABELS[name]||name)+' cookie，重跑…');
-  doStart(profile);
+  openSourceManager(name);
 }
-async function scanCookie(name, profile){
-  addAgent('开始自动扫码（会打开浏览器）…');
+async function managerScan(name){
   const r = await (await fetch('/api/cookie/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:name})})).json();
-  if(r.ok){ addAgent('扫码成功，重跑…'); doStart(profile); }
-  else addAgent('自动扫码失败：'+esc(r.reason||''));
+  if(r.ok){ openSourceManager(name); } else { alert('自动扫码失败：'+(r.reason||'')); }
 }
-function skipLogin(profile){ callRun({action:'start', profile, samples: attachment ? attachment.text : '', enabled:[...ENABLED]}); }
+function managerSkip(name){
+  ENABLED.delete(name);
+  localStorage.setItem(LS_KEY, JSON.stringify([...ENABLED]));
+  renderSources(); renderSourceList();
+  openSourceManager(name);
+}
+async function managerRerun(){
+  closeSourceManager();
+  const p = pendingProfile || document.getElementById('profile').value.trim();
+  if(!p){ return; }
+  doStart(p);
+}
 
 
 function scroll(){ document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight; }
@@ -496,8 +590,9 @@ async function callRun(body){
 }
 async function doStart(profile){
   threadId=null; renderedCount=0;
+  pendingProfile = profile;
   const missing = await missingCookie();
-  if(missing.length){ renderLoginGuide(missing, profile); return; }
+  if(missing.length){ openSourceManager(); return; }
   callRun({action:'start', profile, samples: attachment ? attachment.text : '', enabled:[...ENABLED]});
 }
 function doNext(){ if(!threadId){ addAgent('先输入账号画像启动'); return; } callRun({action:'next', thread_id:threadId}); }
