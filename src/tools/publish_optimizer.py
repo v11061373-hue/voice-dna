@@ -20,6 +20,8 @@
 import re
 from typing import Any
 
+from src import llm_mode
+
 _DEFAULT_PLATFORM = "threads"
 # postpilot DEFAULT_SLOTS 的白天时段（09:00—22:00）。
 _SLOTS = ["09:00", "10:30", "12:00", "13:30", "15:00",
@@ -73,7 +75,7 @@ def run(**kwargs: Any) -> dict[str, Any]:
         t, h = _extract(text)
         tags = tags if isinstance(tags, list) else t
         hashtags = hashtags if isinstance(hashtags, list) else h
-    return {
+    plan = {
         "platform": platform,
         "best_time": _best_time(platform),
         "tags": tags,
@@ -81,3 +83,31 @@ def run(**kwargs: Any) -> dict[str, Any]:
         "description": str(script.get("body") or script.get("caption")
                            or script.get("summary") or ""),
     }
+    # 三段式第二段：LLM 优化标题标签（全开档；兜底/确定性走规则主路径）。
+    return llm_mode.supplement(
+        "publish_optimizer", has_baseline=True, baseline=plan,
+        fn=lambda: _llm_optimize(plan),
+    )
+
+
+def _llm_optimize(plan: dict[str, Any]) -> dict[str, Any]:
+    """LLM 优化标题/标签/描述，返回更新后的发布计划。"""
+    from src import agents, llm
+
+    prompt = (
+        "优化以下发布计划的标签/描述，只输出 JSON "
+        '{"tags": ["..."], "hashtags": ["#..."], "description": "..."}。\n'
+        f"当前计划: {plan}"
+    )
+    text = llm.call_llm(prompt, system=agents.system_prompt("publish_optimizer"))
+    data = llm.parse_json(text)
+    if not isinstance(data, dict):
+        return plan
+    out = dict(plan)
+    if isinstance(data.get("tags"), list):
+        out["tags"] = [str(t) for t in data["tags"]]
+    if isinstance(data.get("hashtags"), list):
+        out["hashtags"] = [str(h) for h in data["hashtags"]]
+    if str(data.get("description", "")).strip():
+        out["description"] = str(data["description"])
+    return out

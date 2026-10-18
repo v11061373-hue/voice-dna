@@ -45,3 +45,15 @@ def test_scores_have_discrimination_and_are_sorted():
     assert scores[0] != scores[1]
     assert scores == sorted(scores, reverse=True)
     assert out[0]["title"] == "高热"
+
+
+def test_run_analytics_shifts_ranking_to_explore():
+    """回流（低四分位）：抬差异化权重，独特选题压过热门选题。"""
+    trends = [
+        {"title": "热门A", "heat": 100, "category": "", "url": "", "platform": "douyin"},
+        {"title": "独特B", "heat": 70, "category": "", "url": "https://x", "platform": "douyin"},
+    ]
+    base = topic_planner.run(trends=trends)
+    assert base[0]["title"] == "热门A"  # 无回流：热度优先
+    looped = topic_planner.run(trends=trends, analytics={"benchmark": {"quartile": 1}})
+    assert looped[0]["title"] == "独特B"  # 低四分位：差异化优先

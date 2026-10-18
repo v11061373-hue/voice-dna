@@ -1,0 +1,5 @@
+[
+  {"name": "baidu-search", "transport": "stdio", "command": "npx", "args": ["-y", "baidu-search-mcp"]},
+  {"name": "bing-cn", "transport": "stdio", "command": "npx", "args": ["-y", "bing-cn-mcp"]},
+  {"name": "cn-scraper", "transport": "stdio", "command": "cn-scraper-mcp", "args": []}
+]

@@ -5,21 +5,18 @@
 """
 
 import json
-import os
 from typing import Any
 
-import httpx
+from src import llm, llm_mode
+from src.schemas import STYLE_CARD_FIELDS  # 单一真相源（C3 schema 硬门共用）
 
-# 风格卡 7 字段（借 StyleLLM models 风格维度定义，清单：借概念）。
-STYLE_CARD_FIELDS: tuple[str, ...] = (
-    "persona",
-    "voice",
-    "catchphrases",
-    "sentence_patterns",
-    "pacing",
-    "narrative_structure",
-    "visual_style",
-)
+__all__ = [
+    "FALLBACK_STYLE_CARD",
+    "STYLE_CARD_FIELDS",
+    "STYLE_CARD_PROMPT_TEMPLATE",
+    "parse_style_card",
+    "run",
+]
 
 # 抽取 prompt 模板（借 stylellm_chat 中文文风 prompt 范例 + lobe-chat-agents
 # 文案配方）。{profile}/{topics}/{samples} 是 .format() 占位符；输出 JSON。
@@ -31,6 +28,7 @@ STYLE_CARD_PROMPT_TEMPLATE = """\
 - 账号画像: {profile}
 - 目标选题: {topics}
 - 文案样本: {samples}
+- 转录逐字稿: {transcripts}
 ## 抽取维度（缺样本就标注「未知」，不编造）
 1. persona 人设/语气
 2. voice 说话腔调
@@ -42,6 +40,14 @@ STYLE_CARD_PROMPT_TEMPLATE = """\
 ## 输出 schema（只输出 JSON）
 {{"persona": "...", "voice": "...", "catchphrases": ["..."], "sentence_patterns": ["..."], "pacing": "...", "narrative_structure": "...", "visual_style": "..."}}
 """
+
+
+def _fmt_transcripts(transcripts: dict[str, str] | None) -> str:
+    """转录逐字稿 dict → 可读串（学真实口播风格用）；空回「（无）」。"""
+    if not transcripts:
+        return "（无）"
+    parts = [f"{url}：{str(text).strip()[:200]}" for url, text in transcripts.items()]
+    return "\n".join(parts)
 
 
 def parse_style_card(text: str) -> dict[str, Any]:
@@ -65,24 +71,7 @@ def parse_style_card(text: str) -> dict[str, Any]:
     return card
 
 
-def _call_deepseek(prompt: str) -> str:
-    """调 DeepSeek（deepseek-chat）返回 JSON 文本。httpx 直连 OpenAI 兼容 API。"""
-    key = os.environ["DEEPSEEK_API_KEY"]
-    resp = httpx.post(
-        "https://api.deepseek.com/chat/completions",
-        headers={"Authorization": f"Bearer {key}"},
-        json={
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-# 无 key 降级卡（确定性，7 字段全）。有 DEEPSEEK_API_KEY 时真调 DeepSeek。
+# 无 key 降级卡（确定性，7 字段全）。有 key（llm.has_key()）时真调 LLM。
 FALLBACK_STYLE_CARD: dict[str, Any] = {
     "persona": "内容创作者（未配置 DeepSeek，降级通用风格）",
     "voice": "口语化、直白",
@@ -95,13 +84,15 @@ FALLBACK_STYLE_CARD: dict[str, Any] = {
 
 
 def run(**kwargs: Any) -> dict[str, Any]:
-    if "DEEPSEEK_API_KEY" not in os.environ:
+    # C0：确定性档（或开关关）零 LLM，走降级卡；有 key 且允许才真调 LLM。
+    if not llm_mode.llm_enabled("style_mimic") or not llm.has_key():
         return dict(FALLBACK_STYLE_CARD)
     profile = kwargs.get("account_profile", "") or kwargs.get("profile", "")
     topics = kwargs.get("topics", [])
     samples = kwargs.get("samples", "")
+    transcripts = kwargs.get("transcripts") or {}
     prompt = STYLE_CARD_PROMPT_TEMPLATE.format(
-        profile=profile, topics=topics, samples=samples
+        profile=profile, topics=topics, samples=samples, transcripts=_fmt_transcripts(transcripts)
     )
-    text = _call_deepseek(prompt)
+    text = llm.call_llm(prompt)
     return parse_style_card(text)

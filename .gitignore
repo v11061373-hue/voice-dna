@@ -21,3 +21,12 @@ venv/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 运行时产物（会话状态/审计日志/下载缓存，不入库）
+checkpoints.db*
+sessions.db
+test_checkpoint.db*
+logs/
+.files/
+_served.html
+accio-*.css

@@ -1,0 +1,40 @@
+{
+  "bilibili": {
+    "kind": "search",
+    "requires_auth": false,
+    "servers": [{"server": "cn-scraper", "tool": "bilibili_search", "arg": "keyword"}]
+  },
+  "youtube": {"kind": "scraper", "requires_auth": false},
+  "douyin": {
+    "kind": "search",
+    "requires_auth": true,
+    "auth": "cookie",
+    "auth_hint": "首次用 cn-scraper 扫码登录抖音（登录态存 cn-scraper 自身，不落 voice-dna）",
+    "login_url": "https://www.douyin.com/",
+    "servers": [{"server": "cn-scraper", "tool": "douyin_search", "arg": "keyword"}]
+  },
+  "weibo": {
+    "kind": "search",
+    "requires_auth": true,
+    "auth": "cookie",
+    "auth_hint": "首次用 cn-scraper 扫码登录微博（登录态存 cn-scraper 自身，不落 voice-dna）",
+    "login_url": "https://weibo.com/",
+    "servers": [{"server": "cn-scraper", "tool": "weibo_search", "arg": "keyword"}]
+  },
+  "xiaohongshu": {
+    "kind": "search",
+    "requires_auth": true,
+    "auth": "cookie",
+    "auth_hint": "首次用 cn-scraper 扫码登录小红书（登录态存 cn-scraper 自身，不落 voice-dna）",
+    "login_url": "https://www.xiaohongshu.com/",
+    "servers": [{"server": "cn-scraper", "tool": "xiaohongshu_search", "arg": "keyword"}]
+  },
+  "search": {
+    "kind": "search",
+    "requires_auth": false,
+    "servers": [
+      {"server": "baidu-search", "tool": "baidu_search"},
+      {"server": "bing-cn", "tool": "bing_search"}
+    ]
+  }
+}

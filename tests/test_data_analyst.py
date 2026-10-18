@@ -81,3 +81,57 @@ def test_run_computes_anomalies_and_benchmark():
     assert out["benchmark"]["quartile"] == 4
     assert out["benchmark"]["view_bucket"] == "100K以下"
     assert out["metrics"]["total_views"] == 1602
+
+
+# ——— P5-E v1 vs v2 脚本对照 ———
+
+
+def test_compare_scripts_better_when_changed_and_grounded():
+    """v2 脚本变化且落地转录词 → 更好。"""
+    v1 = {"body": "为什么美妆看起来简单"}
+    v2 = {"body": "秋冬显白口红才是关键"}
+    cmp = data_analyst.compare_scripts(v1, v2, {"u": "秋冬显白口红"})
+    assert cmp["changed"] is True
+    assert cmp["grounded"] is True
+    assert cmp["verdict"] == "更好"
+
+
+def test_compare_scripts_verified_when_same_and_grounded():
+    """v2 未变但转录词命中 → 被验证。"""
+    body = {"body": "秋冬显白口红"}
+    cmp = data_analyst.compare_scripts(body, body, {"u": "秋冬显白口红"})
+    assert cmp["changed"] is False
+    assert cmp["grounded"] is True
+    assert cmp["verdict"] == "被验证"
+
+
+def test_compare_scripts_unchanged_when_same_and_ungrounded():
+    """v2 未变且无转录词 → 未变。"""
+    body = {"body": "内容"}
+    cmp = data_analyst.compare_scripts(body, body, {"u": "完全无关的转录"})
+    assert cmp["verdict"] == "未变"
+
+
+def test_run_appends_comparison_when_previous_script():
+    """previous_script 传入时 report 追加 v1 vs v2 对照段，含 verdict。"""
+    out = data_analyst.run(
+        previous_script={"body": "旧"},
+        script={"body": "秋冬显白口红"},
+        transcripts={"u": "秋冬显白口红"},
+    )
+    assert out["comparison"]["verdict"] == "更好"
+    assert "对照" in out["report"]
+
+
+def test_run_keeps_comparison_verdict_when_llm_rewrites(monkeypatch):
+    """full 档 LLM 重写 report 后，v1 vs v2 对照 verdict 仍保留在 report 尾。"""
+    monkeypatch.setattr(data_analyst.llm_mode, "get_mode", lambda: "full")
+    monkeypatch.setattr("src.llm.has_key", lambda: True)
+    monkeypatch.setattr("src.llm.call_llm", lambda *a, **k: "LLM 重写的结论")
+    out = data_analyst.run(
+        previous_script={"body": "旧"},
+        script={"body": "秋冬显白口红"},
+        transcripts={"u": "秋冬显白口红"},
+    )
+    assert out["comparison"]["verdict"] == "更好"
+    assert out["report"] == "LLM 重写的结论 v1 vs v2 对照：更好"

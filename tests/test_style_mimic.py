@@ -1,29 +1,29 @@
-"""风格模仿 tool 契约测试（占位骨架）。
-
-占位 run() 不接 LLM；本测试锁契约：风格卡字段 + 抽取 prompt 模板，
-接 LLM（步骤 5）时改 run() 用模板喂模型，字段签名不变。
-"""
+"""风格模仿 tool 契约测试 — run 经 llm.py 抽风格卡，无 key 降级。"""
 
 import pytest
 
+from src import llm
 from src.tools import style_mimic
 
 
 def test_run_returns_style_card_dict(monkeypatch):
-    """有 key 时 run() 组装 prompt 喂 LLM 解析风格卡，返回 dict 含 persona。"""
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "dummy")
-    monkeypatch.setattr(style_mimic, "_call_deepseek", lambda _: '{"persona": "p"}')
+    """有 key 时 run() 经 llm.call_llm 抽卡，返回 dict 含 persona。"""
+    monkeypatch.setattr(llm, "has_key", lambda: True)
+    monkeypatch.setattr(llm, "call_llm", lambda _: '{"persona": "p"}')
     out = style_mimic.run()
     assert isinstance(out, dict)
     assert out["persona"] == "p"
 
 
 def test_run_without_api_key_degrades(monkeypatch):
-    """无 DEEPSEEK_API_KEY 时降级确定性风格卡（7 字段），不崩。"""
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    """无 key 时降级确定性风格卡（7 字段），不调 LLM。"""
+    monkeypatch.setattr(llm, "has_key", lambda: False)
+    called = []
+    monkeypatch.setattr(llm, "call_llm", lambda _: called.append(1))
     out = style_mimic.run()
     assert set(out) == set(style_mimic.STYLE_CARD_FIELDS)
     assert out["persona"]
+    assert not called  # 降级路径不调 LLM
 
 
 def test_style_card_schema_has_seven_fields():

@@ -4,9 +4,14 @@
 + 互动率 / 分层桶 / 四分位 benchmark（借 mirrormetrics/framepulse 公式）。
 """
 
+from __future__ import annotations
+
+import re
 from typing import Any
 
 import numpy as np
+
+from src import llm_mode
 
 # 报告 4 字段（借 Postiz/BrightBean/ayrshare analytics 数据模型，清单：借概念）。
 REPORT_FIELDS: tuple[str, ...] = (
@@ -78,7 +83,10 @@ _DEMO_COMMENTS = [30, 33, 28, 40, 35, 210, 38]
 
 
 def run(**kwargs: Any) -> dict[str, Any]:
-    """读入 metrics 序列，端到端出报告：metrics + benchmark + anomalies。"""
+    """读入 metrics 序列，端到端出报告：metrics + benchmark + anomalies。
+
+    可选 v2 回流对照（previous_script 传入时）：report 追加 v1 vs v2 段。
+    """
     views = [float(v) for v in (kwargs.get("views") or _DEMO_VIEWS)]
     likes = [float(v) for v in (kwargs.get("likes") or _DEMO_LIKES)]
     comments = [float(v) for v in (kwargs.get("comments") or _DEMO_COMMENTS)]
@@ -101,9 +109,79 @@ def run(**kwargs: Any) -> dict[str, Any]:
         f"{benchmark['quartile']} 四分位（{benchmark['view_bucket']}），"
         f"IQR 1.5 检出 {len(anomalies)} 处异常。"
     )
-    return {
+    result: dict[str, Any] = {
         "report": report,
         "metrics": metrics,
         "benchmark": benchmark,
         "anomalies": anomalies,
     }
+    previous_script = kwargs.get("previous_script")
+    if previous_script is not None:
+        result["comparison"] = compare_scripts(
+            previous_script,
+            kwargs.get("script") or {},
+            kwargs.get("transcripts") or {},
+        )
+    # 三段式第二段：LLM 写结论（全开档；兜底/确定性走统计主路径）。
+    out = llm_mode.supplement(
+        "data_analyst", has_baseline=True, baseline=result,
+        fn=lambda: _llm_conclusion(result),
+    )
+    # 对照 verdict 挂 report 尾，放在 supplement 之后，full 档 LLM 重写 report 也不丢。
+    if "comparison" in out:
+        out["report"] = str(out.get("report", "")) + f" v1 vs v2 对照：{out['comparison']['verdict']}"
+    return out
+
+
+# ——— P5-E v1 vs v2 脚本对照 ———
+
+# 转录「内容词」：2-4 字中文连续段 + 3+ 字母英文词。
+# ponytail: 无中文分词，最长 4 字截断近似关键词；要更准上 jieba/向量召回。
+_CONTENT_WORD_RE = re.compile(r"[一-鿿]{2,4}|[A-Za-z]{3,}")
+
+
+def _content_words(transcripts: dict[str, str] | None) -> set[str]:
+    words: set[str] = set()
+    for text in (transcripts or {}).values():
+        words.update(m.group(0) for m in _CONTENT_WORD_RE.finditer(str(text)))
+    return words
+
+
+def compare_scripts(
+    v1: dict[str, Any], v2: dict[str, Any], transcripts: dict[str, str] | None
+) -> dict[str, Any]:
+    """v1 vs v2 脚本对照（v2 回流）。四类：更好 / 变化 / 被验证 / 未变。
+
+    - 更好：v2 脚本变化且落地转录内容词。
+    - 变化：v2 有变化但未落地转录词。
+    - 被验证：未变但转录词命中（v1 脚本被真实口播验证）。
+    - 未变：既无变化又无转录词命中。
+    """
+    b1 = str((v1 or {}).get("body", "")).strip()
+    b2 = str((v2 or {}).get("body", "")).strip()
+    changed = b1 != b2
+    words = _content_words(transcripts)
+    grounded = any(w in b2 for w in words)
+    if changed and grounded:
+        verdict = "更好"
+    elif changed:
+        verdict = "变化"
+    elif grounded:
+        verdict = "被验证"
+    else:
+        verdict = "未变"
+    return {"changed": changed, "grounded": grounded, "verdict": verdict}
+
+
+def _llm_conclusion(analytics: dict[str, Any]) -> dict[str, Any]:
+    """LLM 基于指标/基准/异常写一句可执行结论（不编造数字）。"""
+    from src import agents, llm
+
+    prompt = (
+        "根据以下数据写一句可执行结论（只依据给定数字，不编造）。\n"
+        f"指标: {analytics.get('metrics')}\n"
+        f"基准: {analytics.get('benchmark')}\n"
+        f"异常: {analytics.get('anomalies')}"
+    )
+    text = llm.call_llm(prompt, system=agents.system_prompt("data_analyst")).strip()
+    return {**analytics, "report": text or analytics["report"]}

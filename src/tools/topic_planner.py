@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src import llm_mode
+
 # 搬自 marketingskills content-strategy/SKILL.md:310-328：因子 → 权重。
 _WEIGHTS: list[tuple[str, float]] = [
     ("热度", 0.4),
@@ -45,7 +47,7 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
-def _score(trend: dict[str, Any], max_heat: float) -> tuple[float, str]:
+def _score(trend: dict[str, Any], max_heat: float, weights: list[tuple[str, float]] = _WEIGHTS) -> tuple[float, str]:
     """确定性 4 因子加权打分，返回 (总分 0-10, 理由)。"""
     heat = _to_float(trend.get("heat"))
     factors: dict[str, float] = {
@@ -54,16 +56,36 @@ def _score(trend: dict[str, Any], max_heat: float) -> tuple[float, str]:
         "差异化": 10.0 if str(trend.get("url") or "").strip() else 5.0,
         "可执行性": 10.0 if str(trend.get("platform") or "").strip() else 5.0,
     }
-    total = sum(weight * factors[name] for name, weight in _WEIGHTS)
+    total = sum(weight * factors[name] for name, weight in weights)
     top = max(factors, key=factors.__getitem__)
     reason = f"{top}突出({factors[top]:.1f}/10)；热度 {heat:.0f}"
     return round(total, 1), reason
+
+
+def _loop_weights(analytics: Any) -> list[tuple[str, float]]:
+    """回流权重（可选）：上轮四分位低(<3)探索（抬差异化）、高(>=3)收割（抬热度）。
+
+    无 analytics / 无 benchmark 原样返回，退回确定性 4 因子。
+    """
+    q = 0
+    if isinstance(analytics, dict):
+        bench = analytics.get("benchmark")
+        if isinstance(bench, dict):
+            q = int(bench.get("quartile") or 0)
+    if not q:
+        return _WEIGHTS
+    boost, drop = ("热度", "差异化") if q >= 3 else ("差异化", "热度")
+    return [
+        (name, w + 0.1 if name == boost else w - 0.1 if name == drop else w)
+        for name, w in _WEIGHTS
+    ]
 
 
 def run(**kwargs: Any) -> list[dict[str, Any]]:
     """读入 trends 热点列表，确定性加权打分排序，返回选题 list。
 
     每项 {title, score, reason}。空输入 / 异常返回 []（非 dict）。
+    可选 analytics（回流）：低四分位抬差异化（探索），高四分位抬热度（收割）。
     """
     trends = kwargs.get("trends") or []
     if not isinstance(trends, list):
@@ -73,12 +95,42 @@ def run(**kwargs: Any) -> list[dict[str, Any]]:
         return []
 
     max_heat = max(_to_float(t.get("heat")) for t in trends)
+    weights = _loop_weights(kwargs.get("analytics"))
     out: list[dict[str, Any]] = []
     for t in trends:
         title = str(t.get("title") or "").strip()
         if not title:
             continue
-        score, reason = _score(t, max_heat)
+        score, reason = _score(t, max_heat, weights)
         out.append({"title": title, "score": score, "reason": reason})
     out.sort(key=lambda item: item["score"], reverse=True)
-    return out
+    if not out:
+        return out
+    # 三段式第二段：LLM 写理由 + 洞察（全开档；兜底/确定性走主路径）。
+    return llm_mode.supplement(
+        "topic_planner", has_baseline=True, baseline=out, fn=lambda: _llm_reasons(out)
+    )
+
+
+def _llm_reasons(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """LLM 为每个选题写理由 + 洞察，按 title 回填（未命中保留确定性理由）。"""
+    from src import agents, llm
+
+    titles = [str(t["title"]) for t in topics]
+    prompt = (
+        "为每个选题写一条理由+洞察（20 字内），只输出 JSON 数组，每项 "
+        '{"title": "...", "reason": "..."}。\n选题: ' + str(titles)
+    )
+    text = llm.call_llm(prompt, system=agents.system_prompt("topic_planner"))
+    data = llm.parse_json(text)
+    if not isinstance(data, list):
+        return topics
+    reason_map = {
+        str(d.get("title")): str(d.get("reason", "")).strip()
+        for d in data
+        if isinstance(d, dict)
+    }
+    for t in topics:
+        if reason_map.get(t["title"]):
+            t["reason"] = reason_map[t["title"]]
+    return topics

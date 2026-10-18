@@ -5,4 +5,6 @@ httpx==0.28.1           # trend_hunter B站热门 + style_mimic 直连 DeepSeek
 chainlit==2.12.0        # 前端对话流（README 调研稳定版）
 langchain-core==1.6.0   # chainlit LangchainCallbackHandler 直接依赖
 fastmcp==3.4.5          # MCP server/client（FastMCP in-memory 直连）
+aiosqlite==0.22.1       # AsyncSqliteSaver 依赖（会话持久化）
+langgraph-checkpoint-sqlite==3.1.2  # SqliteSaver（跨进程续跑）
 pytest==9.1.1           # 测试

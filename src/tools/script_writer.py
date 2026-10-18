@@ -19,6 +19,8 @@ scenes schema 同构，接 LLM 时只换 `_build_scenes` 的实现、签名不�
 
 from typing import Any
 
+from src import llm_mode
+
 # 以后接 LLM 的口子：system prompt（搬自 MoneyPrinterTurbo，改中文化+scenes schema）。
 # ponytail: 步骤5 接 LLM 时 .format(subject=..., scene_count=...) 后喂模型，
 # 解析返回的 scenes；当前用下方 _SCENE_PLAN 确定性填充同结构。
@@ -28,6 +30,12 @@ SCRIPT_PROMPT_TEMPLATE = """\
 1. 只输出脚本文案正文：不要标题、不要 Markdown、不要 "旁白/画外音" 指示词。
 2. 直入主题，禁止 "欢迎来到本视频" 式开场。
 3. 使用与主题相同的语言；不引用本 prompt。
+4. 只基于「可溯源素材」写，禁止编造素材里没有出现的具体数字/品牌/型号/人名/价格；涉及数量或型号时只复述素材原词，不得把约数换算成精确数。
+# 可溯源素材
+- 账号画像: {profile}
+- 热点标题: {trends}
+- 文案样本: {samples}
+- 转录逐字稿: {transcripts}
 # 运行上下文
 - 主题: {subject}
 - 分镜数: {scene_count}
@@ -56,6 +64,24 @@ def _subject(style_card: dict[str, Any]) -> str:
     return _DEFAULT_SUBJECT
 
 
+def _fmt_trends(trends: list[dict[str, Any]]) -> str:
+    """热点标题列表 → 顿号串（可溯源素材行）。空回「（无）」。"""
+    titles = [
+        str(t.get("title", "")).strip()
+        for t in trends
+        if isinstance(t, dict) and str(t.get("title", "")).strip()
+    ]
+    return "、".join(titles) if titles else "（无）"
+
+
+def _fmt_transcripts(transcripts: dict[str, str] | None) -> str:
+    """转录逐字稿 dict → 可读串（可溯源素材行）；空回「（无）」。"""
+    if not transcripts:
+        return "（无）"
+    parts = [f"{url}：{str(text).strip()[:200]}" for url, text in transcripts.items()]
+    return "\n".join(parts)
+
+
 def _build_scenes(subject: str) -> list[dict[str, Any]]:
     """确定性模板填充：五段式骨架 → 分镜 list。"""
     return [
@@ -64,8 +90,54 @@ def _build_scenes(subject: str) -> list[dict[str, Any]]:
     ]
 
 
-def run(**kwargs: Any) -> dict[str, Any]:
-    subject = _subject(kwargs.get("style_card") or {})
+def _build_script(subject: str) -> dict[str, Any]:
+    """确定性主路径：模板填充五段式分镜 → {body, scenes, duration}。"""
     scenes = _build_scenes(subject)
     body = "\n\n".join(scene["narration"] for scene in scenes)
     return {"body": body, "scenes": scenes, "duration": sum(s["duration"] for s in scenes)}
+
+
+def _llm_script(
+    subject: str,
+    trends: list[dict[str, Any]] | None = None,
+    samples: str = "",
+    profile: str = "",
+    transcripts: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """LLM 写脚本 body（全开档）。SCRIPT_PROMPT_TEMPLATE 是接 LLM 的口子。"""
+    from src import agents, llm
+
+    prompt = SCRIPT_PROMPT_TEMPLATE.format(
+        subject=subject,
+        scene_count=5,
+        profile=profile,
+        trends=_fmt_trends(trends or []),
+        samples=samples,
+        transcripts=_fmt_transcripts(transcripts),
+    )
+    text = llm.call_llm(prompt, system=agents.system_prompt("script_writer"))
+    data = llm.parse_json(text)
+    scenes = data.get("scenes") if isinstance(data, dict) else None
+    if not isinstance(scenes, list) or not scenes:
+        raise ValueError("LLM 脚本缺 scenes")
+    body = "\n\n".join(str(s.get("narration", "")) for s in scenes if isinstance(s, dict))
+    if not body.strip():
+        raise ValueError("LLM 脚本 body 空")
+    duration = sum(int(s.get("duration", 0) or 0) for s in scenes if isinstance(s, dict))
+    return {"body": body, "scenes": scenes, "duration": duration}
+
+
+def run(**kwargs: Any) -> dict[str, Any]:
+    subject = _subject(kwargs.get("style_card") or {})
+    trends = kwargs.get("trends") or []
+    samples = kwargs.get("samples") or ""
+    profile = kwargs.get("profile") or kwargs.get("account_profile") or ""
+    transcripts = kwargs.get("transcripts") or {}
+    result = _build_script(subject)
+    # 三段式第二段：LLM 写 body（全开档；兜底/确定性走模板主路径）。
+    return llm_mode.supplement(
+        "script_writer",
+        has_baseline=True,
+        baseline=result,
+        fn=lambda: _llm_script(subject, trends=trends, samples=samples, profile=profile, transcripts=transcripts),
+    )

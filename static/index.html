@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>表达基因 Voice DNA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Attio 深色语言：近黑单色底 + 唯一钴蓝强调 + 语义色只给状态。1px 发丝边框，圆角 ≤12px。 */
+:root{
+  /* Accio 深色 token（提取自 app.asar：shadcn HSL 映射到本项目命名） */
+  --bg:hsl(228 20% 8%); --surface:hsl(228 18% 11%); --surface2:hsl(228 14% 16%);
+  --border:hsl(228 14% 18%); --border-strong:hsl(228 14% 24%);
+  --text:hsl(220 14% 92%); --muted:hsl(220 9% 46%); --faint:hsl(220 9% 38%);
+  --accent:hsl(217 91% 60%); --accent-strong:hsl(221 83% 53%);
+  --green:hsl(152 50% 36%); --amber:hsl(38 92% 50%); --red:hsl(0 62% 42%);
+  --sidebar:hsl(228 20% 7%);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--text);
+  font:15px/1.55 'Inter',-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-weight:500;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+.app{display:flex;height:100vh}
+
+/* 左栏 */
+aside{width:248px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:14px 10px}
+.brand{font-size:15px;font-weight:600;letter-spacing:-.02em;padding:4px 10px 14px}
+.brand .b{color:var(--accent)}
+.navgroup{color:var(--faint);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:12px 10px 6px}
+.navitem{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;color:var(--muted);font-size:13.5px;cursor:pointer}
+.navitem:hover{background:var(--surface);color:var(--text)}
+.navitem.active{background:var(--surface2);color:var(--text);font-weight:600}
+.navitem.disabled{color:var(--faint);cursor:default}
+.navitem.disabled:hover{background:transparent;color:var(--faint)}
+.session{padding:6px 10px;border-radius:7px;cursor:pointer;margin-bottom:2px}
+.session:hover{background:var(--surface)}
+.session .s-top{display:flex;align-items:center;justify-content:space-between}
+.session .s-profile{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session .s-del{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
+.session .s-del:hover{color:var(--red)}
+.session .s-stage{font-size:11.5px;color:var(--faint);margin-top:1px}
+.sessions-empty{color:var(--faint);font-size:12px;padding:2px 10px}
+.sidebar-footer{margin-top:auto;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:2px}
+
+/* 主区 */
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{display:flex;align-items:center;gap:14px;padding:13px 24px;border-bottom:1px solid var(--border);flex:none}
+.topbar h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.02em}
+.topbar .spacer{flex:1}
+.topbar button{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 12px;font:600 12px 'Inter',inherit;cursor:pointer}
+.topbar button:hover{color:var(--text);border-color:var(--border-strong)}
+#thread{flex:1;overflow-y:auto;padding:24px 24px 16px}
+.inner{max-width:760px;margin:0 auto}
+
+.msg{margin-bottom:14px;font-size:14px}
+.msg.user{display:flex;justify-content:flex-end}
+.msg.user .bubble{background:var(--accent);color:#fff;border-radius:10px;padding:8px 14px;max-width:80%;font-weight:500}
+.msg.agent{color:var(--muted);padding-left:2px}
+
+/* 节点卡片 */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.card.running{border-color:var(--accent)}
+.card.error{border-color:var(--red)}
+.card .head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.card .head .icon{font-size:15px}
+.card .head .name{font-weight:600;font-size:14px;flex:1}
+.badge{font-size:11px;font-weight:600;border-radius:999px;padding:2px 10px}
+.badge.running{color:var(--accent);border:1px solid var(--accent)}
+.badge.done{color:var(--green);background:rgba(63,185,80,.12)}
+.badge.error{color:var(--red);background:rgba(248,81,73,.12)}
+.gatebadge{font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px}
+.gatebadge.PASS{color:var(--green);background:rgba(63,185,80,.12)}
+.gatebadge.WARN{color:var(--amber);background:rgba(210,153,34,.14)}
+.gatebadge.HALT{color:var(--red);background:rgba(248,81,73,.14)}
+.card .body{padding:6px 16px 14px}
+.loading{color:var(--faint);font-size:13px;padding:6px 0}
+
+/* 产物排版 */
+.row{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:0}
+.row .t{font-weight:500}
+.row .meta{color:var(--muted);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:5px 12px;padding:6px 0}
+.kv .k{color:var(--faint);font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:1px 9px;font-size:12px;font-weight:500}
+.score{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+.script-body{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;white-space:pre-wrap;margin:8px 0;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border:1px solid var(--border);padding:6px 10px;text-align:left}
+th{color:var(--faint);font-weight:500;background:var(--surface2);font-size:12px}
+td{font-variant-numeric:tabular-nums}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{flex:1;min-width:110px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.stat .v{font-size:19px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .l{color:var(--faint);font-size:11px;margin-top:2px}
+.warn{color:var(--amber);font-size:13px;padding:4px 0}
+.empty{color:var(--faint);padding:6px 0;font-size:14px}
+
+/* 摘要 / 兜底 / 操作 */
+.card.summary{border-color:var(--border-strong)}
+.card.summary .head .name{color:var(--green)}
+.line{padding:5px 0;color:var(--muted);font-size:14px}
+.line b{color:var(--text);font-weight:600}
+.halt{background:var(--surface);border:1px solid var(--red);border-radius:10px;padding:14px 16px;margin-bottom:10px;color:var(--red);font-weight:500;font-size:14px}
+.actions{display:flex;gap:8px;margin-bottom:16px}
+.btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 14px;font:600 13px 'Inter',inherit;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:hover{border-color:var(--border-strong)}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* 输入栏 */
+.inputbar{border-top:1px solid var(--border);padding:14px 24px 18px;flex:none}
+.inputbar .inner{display:flex;gap:8px;align-items:flex-end;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:6px 6px 6px 12px}
+.inputbar textarea{flex:1;background:transparent;border:0;color:var(--text);font:15px 'Inter',inherit;font-weight:500;outline:none;resize:none;padding:9px 0;max-height:200px;line-height:1.55}
+.inputbar textarea::placeholder{color:var(--faint)}
+.inputbar button.send{background:var(--accent);color:#fff;border:0;border-radius:7px;padding:9px 20px;font:600 14px 'Inter',inherit;cursor:pointer}
+.inputbar button.send:hover{background:var(--accent-strong)}
+.inputbar button.send:disabled{opacity:.4;cursor:default}
+.inputbar button.attach{background:transparent;color:var(--muted);border:0;border-radius:7px;padding:9px 10px;font-size:16px;cursor:pointer;line-height:1}
+.inputbar button.attach:hover{color:var(--text);background:var(--surface2)}
+.attachinfo{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--muted)}
+.attachinfo button{background:transparent;border:0;color:var(--faint);cursor:pointer;font-size:14px;padding:0 4px}
+.attachinfo button:hover{color:var(--red)}
+
+/* 数据源 chip 栏（A2，对话框正上方常驻） */
+.sourcebar{display:flex;flex-wrap:wrap;gap:8px;padding:12px 24px 0;flex:none}
+.schip{border:1px solid var(--border);color:var(--faint);background:var(--surface);border-radius:999px;padding:4px 14px;font-size:13px;font-weight:500;cursor:pointer;user-select:none}
+.schip.on{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,.10)}
+.schip:hover{border-color:var(--border-strong);color:var(--text)}
+.schip.on:hover{color:var(--accent)}
+.cookie-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font:13px 'Inter',inherit;margin:8px 0;min-height:56px;resize:vertical}
+
+/* 个人账号配置面板（D1） */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50}
+.panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:51;width:540px;max-width:92vw;max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;padding:20px 24px}
+.panel h2{margin:0 0 4px;font-size:16px;letter-spacing:-.02em}
+.panel .sub{color:var(--muted);font-size:12.5px;margin-bottom:16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600}
+.field label .st{color:var(--faint);font-weight:500}
+.field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 10px;font:13px 'Inter',inherit}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field option{background:var(--surface2);color:var(--text)}
+.sec{font-size:12px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--border)}
+.panel .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">表达基因 <span class="b">Voice DNA</span></div>
+    <div class="navitem" data-node="new" onclick="newTask()">➕ 新任务</div>
+    <div class="navgroup">Agent</div>
+    <div class="navitem" data-node="trend_hunter" onclick="openAgent('trend_hunter')">🔥 热点捕捉</div>
+    <div class="navitem" data-node="topic_planner" onclick="openAgent('topic_planner')">🎯 选题策划</div>
+    <div class="navitem" data-node="style_mimic" onclick="openAgent('style_mimic')">🎭 风格模仿</div>
+    <div class="navitem" data-node="script_writer" onclick="openAgent('script_writer')">✍️ 脚本文案</div>
+    <div class="navitem" data-node="publish_optimizer" onclick="openAgent('publish_optimizer')">📅 发布优化</div>
+    <div class="navitem" data-node="data_analyst" onclick="openAgent('data_analyst')">📊 数据分析</div>
+    <div class="navgroup">会话历史</div>
+    <div id="sessions"><div class="sessions-empty">暂无会话</div></div>
+    <div class="navgroup">插件</div>
+    <div class="navitem disabled" title="plugins/sources.json 或 plugins/scrapers/ 文件接入">📡 数据源（文件接入）</div>
+    <div id="exttools"><div class="sessions-empty">无外部 Skill</div></div>
+    <div class="sidebar-footer">
+      <div class="navitem" data-node="config" onclick="openConfig()">👤 个人账号</div>
+      <div class="navitem disabled">⚙️ 设置</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="title">新任务</h1>
+      <span class="spacer"></span>
+      <button id="resetbtn" onclick="reset()">重来</button>
+    </div>
+
+    <div id="thread"><div class="inner" id="inner"></div></div>
+    <div class="sourcebar" id="sourcebar"></div>
+    <div class="inputbar">
+      <div class="inner">
+        <button id="attachbtn" class="attach" title="上传 md 文件（作风格样本 / 参考素材）">📎</button>
+        <textarea id="profile" rows="1" placeholder="输入账号画像，如「美妆博主」；或 继续 / 全跑"></textarea>
+        <button id="send" class="send">发送</button>
+      </div>
+      <div id="attachinfo" class="attachinfo" hidden></div>
+    </div>
+    <input type="file" id="fileinput" accept=".md,.markdown,text/markdown,text/plain" hidden>
+  </main>
+</div>
+
+<div class="mask" id="cmask" hidden onclick="closeConfig()"></div>
+<div class="panel" id="cpanel" hidden>
+  <h2>👤 个人账号</h2>
+  <div class="sub">配置 LLM 供应商。key 只存内存（重启失效），不落盘不落库。</div>
+  <div class="field"><label>供应商</label><select id="c-provider"></select></div>
+  <div class="field"><label>Base URL</label><input id="c-base_url" placeholder="https://api.deepseek.com"></div>
+  <div class="field"><label>模型</label><input id="c-model" placeholder="deepseek-chat"></div>
+  <div class="field"><label>API Key <span class="st" id="c-key-hint"></span></label><input id="c-key" type="password" placeholder="sk-..."></div>
+  <div class="sec">LLM-judge（可选，默认复用主供应商）</div>
+  <div class="field"><label>Judge 供应商</label><select id="c-judge_provider"></select></div>
+  <div class="field"><label>Judge Base URL</label><input id="c-judge_base_url" placeholder="留空 = 复用主"></div>
+  <div class="field"><label>Judge API Key <span class="st" id="c-judge_key_hint"></span></label><input id="c-judge_key" type="password" placeholder="留空 = 复用主 key"></div>
+  <div class="foot"><button class="btn" onclick="closeConfig()">取消</button><button class="btn primary" onclick="saveConfig()">保存</button></div>
+</div>
+
+<script>
+const STAGES = [
+  {node:"trend_hunter",     emoji:"🔥", name:"热点捕捉", field:"trends"},
+  {node:"topic_planner",    emoji:"🎯", name:"选题策划", field:"topics"},
+  {node:"style_mimic",      emoji:"🎭", name:"风格模仿", field:"style_card"},
+  {node:"script_writer",    emoji:"✍️", name:"脚本文案", field:"script"},
+  {node:"publish_optimizer",emoji:"📅", name:"发布优化", field:"publish_plan"},
+  {node:"data_analyst",     emoji:"📊", name:"数据分析", field:"analytics"},
+];
+const BADGE = {running:'运行中', done:'完成', error:'失败'};
+const EXAMPLES = {
+  trend_hunter:{platform:"bilibili"},
+  topic_planner:{trends:[]},
+  style_mimic:{profile:"美妆博主",topics:[],samples:""},
+  script_writer:{style_card:{}},
+  publish_optimizer:{script:{}},
+  data_analyst:{publish_plan:{},views:null},
+};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const heat = n => Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+
+function renderTrends(d){
+  if(!Array.isArray(d) || !d.length) return '<div class="empty">未抓到热点（平台源不可达或登录态未接）</div>';
+  return d.slice(0,10).map(t=>
+    `<div class="row"><span class="t">${esc(t.title)}</span><span class="meta">${esc(t.platform||'')} · 热度 ${heat(t.heat)}${t.category?' · '+esc(t.category):''}</span></div>`
+  ).join('');
+}
+function renderTopics(d){
+  if(!Array.isArray(d) || !d.length) return '<div class="empty">无选题（上游无热点输入）</div>';
+  return d.slice(0,8).map((t,i)=>
+    `<div class="row"><span class="t">${i+1}. ${esc(t.title)}</span><span class="meta"><span class="score">${esc(t.score)}</span> · ${esc(t.reason)}</span></div>`
+  ).join('');
+}
+function renderStyle(c){
+  c = c || {};
+  const L = [["persona","人设"],["voice","腔调"],["catchphrases","口癖"],["sentence_patterns","句式"],["pacing","节奏"],["narrative_structure","叙事结构"],["visual_style","视觉风格"]];
+  return L.map(([k,label])=>{
+    let v = c[k];
+    if(Array.isArray(v)) v = v.length?`<div class="chips">${v.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'（无）';
+    return `<div class="kv"><span class="k">${label}</span><span>${v===undefined?'未知':v}</span></div>`;
+  }).join('');
+}
+function renderScript(s){
+  s = s || {};
+  const scenes = s.scenes || [];
+  let html = `<div class="script-body">${esc(s.body||'')}</div>`;
+  html += `<div class="kv"><span class="k">时长</span><span>${esc(s.duration||0)}s · ${scenes.length} 镜</span></div>`;
+  if(scenes.length){
+    html += '<table><tr><th>时长</th><th>画面</th><th>旁白</th></tr>' +
+      scenes.map(x=>`<tr><td>${esc(x.duration||0)}s</td><td>${esc(x.visual||'')}</td><td>${esc(x.narration||'')}</td></tr>`).join('') + '</table>';
+  }
+  return html;
+}
+function renderPublish(p){
+  p = p || {};
+  const tags = p.tags||[], has = p.hashtags||[];
+  return `<div class="kv"><span class="k">平台</span><span>${esc(p.platform||'')}</span></div>
+    <div class="kv"><span class="k">最佳时间</span><span>${esc(p.best_time||'')}</span></div>
+    <div class="kv"><span class="k">标签</span>${tags.length?`<div class="chips">${tags.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'（无）'}</div>
+    <div class="kv"><span class="k">话题</span>${has.length?`<div class="chips">${has.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:'（无）'}</div>`;
+}
+function renderAnalytics(a){
+  a = a || {};
+  const m = a.metrics||{}, b = a.benchmark||{}, an = a.anomalies||[];
+  let html = `<div class="kv"><span class="k">报告</span><span>${esc(a.report||'')}</span></div>`;
+  html += '<div class="stats">' +
+    `<div class="stat"><div class="v">${heat(m.total_views)}</div><div class="l">总播放</div></div>` +
+    `<div class="stat"><div class="v">${heat(m.avg_views)}</div><div class="l">均播</div></div>` +
+    `<div class="stat"><div class="v">${esc(m.engagement_rate??0)}%</div><div class="l">互动率</div></div></div>`;
+  html += '<div class="stats">' +
+    `<div class="stat"><div class="v">第 ${esc(b.quartile??0)}</div><div class="l">四分位</div></div>` +
+    `<div class="stat"><div class="v">${esc(b.view_bucket||'')}</div><div class="l">层级</div></div>` +
+    `<div class="stat"><div class="v">${heat(b.peer_median)}</div><div class="l">同行中位</div></div></div>`;
+  if(an.length) html += `<div class="warn">⚠️ IQR 1.5 检出 ${an.length} 处异常：${esc(JSON.stringify(an))}</div>`;
+  return html;
+}
+const RENDER = {trends:renderTrends, topics:renderTopics, style_card:renderStyle, script:renderScript, publish_plan:renderPublish, analytics:renderAnalytics};
+
+const thread = document.getElementById('inner');
+const input = document.getElementById('profile');
+const title = document.getElementById('title');
+const resetbtn = document.getElementById('resetbtn');
+const attachinfo = document.getElementById('attachinfo');
+const fileinput = document.getElementById('fileinput');
+let threadId = null, renderedCount = 0, TOOLS = [];
+let CANDIDATES = [];          // END 后候选视频（转录/v2 回流用）
+let mode = 'pipeline';        // 'pipeline' 或 tool 名
+let attachment = null;        // {name, text} | null（md 附件）
+
+// —— 数据源 chip 栏（A2）——
+const LS_KEY = 'vd.enabledSources';
+const SOURCE_LABELS = {bilibili:'B站', youtube:'YouTube', douyin:'抖音', weibo:'微博', search:'🔍 搜索召回'};
+let SOURCES = [];             // /api/sources 能力清单
+let ENABLED = new Set();      // 选中源名
+function renderSources(){
+  const bar = document.getElementById('sourcebar');
+  if(!SOURCES.length){ bar.style.display='none'; return; }
+  bar.style.display='';
+  bar.innerHTML = SOURCES.map(s=>{
+    const on = ENABLED.has(s.name);
+    return `<span class="schip${on?' on':''}" data-src="${esc(s.name)}" onclick="toggleSource('${esc(s.name)}')">${esc(SOURCE_LABELS[s.name]||s.name)}</span>`;
+  }).join('');
+}
+function toggleSource(name){
+  if(ENABLED.has(name)) ENABLED.delete(name); else ENABLED.add(name);
+  localStorage.setItem(LS_KEY, JSON.stringify([...ENABLED]));
+  renderSources();
+}
+async function loadSources(){
+  try{ SOURCES = await (await fetch('/api/sources')).json(); }catch(e){ SOURCES=[]; }
+  let saved = null; try{ saved = localStorage.getItem(LS_KEY); }catch(e){}
+  if(saved){ try{ ENABLED = new Set(JSON.parse(saved)); }catch(e){ ENABLED = new Set(); } }
+  else ENABLED = new Set(SOURCES.filter(s=>s.default_enabled).map(s=>s.name));
+  renderSources();
+}
+// —— cookie 登录（A4 统一入口）——
+async function missingCookie(){
+  try{
+    const d = await (await fetch('/api/cookie')).json();
+    const st = d.statuses || {};
+    return SOURCES.filter(s=>ENABLED.has(s.name) && s.requires_auth && st[s.name]!=='ok');
+  }catch(e){ return []; }
+}
+function renderLoginGuide(missing, profile){
+  const s = missing[0], label = SOURCE_LABELS[s.name]||s.name;
+  addAgent(`🔐 数据源「${label}」需登录。${esc(s.auth_hint||'')}`);
+  thread.insertAdjacentHTML('beforeend',
+    `<div class="card"><div class="head"><span class="icon">🔐</span><span class="name">登录 ${esc(label)}</span></div>
+     <div class="body">
+       <div class="line">${esc(s.auth_hint||'')}${s.login_url?'（登录页：'+esc(s.login_url)+'）':''}</div>
+       <textarea id="cookie-input" class="cookie-input" placeholder="在浏览器登录后，粘贴该站 cookie 到这里"></textarea>
+       <div class="actions"><button class="btn primary" onclick="submitCookie('${esc(s.name)}', '${esc(profile)}')">手动粘贴并重跑</button><button class="btn" onclick="scanCookie('${esc(s.name)}', '${esc(profile)}')">自动扫码</button><button class="btn" onclick="skipLogin('${esc(profile)}')">跳过（该源返回空）</button></div>
+     </div></div>`);
+  scroll();
+}
+async function submitCookie(name, profile){
+  const v = document.getElementById('cookie-input').value.trim();
+  if(!v){ addAgent('请先粘贴 cookie'); return; }
+  await fetch('/api/cookie', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:name, cookie:v})});
+  addAgent('已保存 '+esc(SOURCE_LABELS[name]||name)+' cookie，重跑…');
+  doStart(profile);
+}
+async function scanCookie(name, profile){
+  addAgent('开始自动扫码（会打开浏览器）…');
+  const r = await (await fetch('/api/cookie/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform:name})})).json();
+  if(r.ok){ addAgent('扫码成功，重跑…'); doStart(profile); }
+  else addAgent('自动扫码失败：'+esc(r.reason||''));
+}
+function skipLogin(profile){ callRun({action:'start', profile, samples: attachment ? attachment.text : '', enabled:[...ENABLED]}); }
+
+
+function scroll(){ document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight; }
+function addUser(t){ thread.insertAdjacentHTML('beforeend', `<div class="msg user"><div class="bubble">${esc(t)}</div></div>`); scroll(); }
+function addAgent(t){ thread.insertAdjacentHTML('beforeend', `<div class="msg agent">${t}</div>`); scroll(); }
+
+function makeCard(i, status, bodyHTML, gateText){
+  const s = STAGES[i];
+  const gb = gateText ? `<span class="gatebadge ${gateText}">${gateText}</span>` : '';
+  return `<div class="card ${status}" id="card${i}">
+    <div class="head"><span class="icon">${s.emoji}</span><span class="name">${s.name}</span>${gb}<span class="badge ${status}">${BADGE[status]}</span></div>
+    <div class="body">${bodyHTML}</div>
+  </div>`;
+}
+function setCard(i, status, bodyHTML, gateText){
+  let card = document.getElementById('card'+i);
+  if(!card){ thread.insertAdjacentHTML('beforeend', makeCard(i, status, bodyHTML, gateText)); scroll(); return; }
+  card.className = 'card ' + status;
+  const b = card.querySelector('.badge'); b.className = 'badge ' + status; b.textContent = BADGE[status];
+  card.querySelector('.body').innerHTML = bodyHTML;
+  const gb = card.querySelector('.gatebadge');
+  if(gateText){ gb.textContent = gateText; gb.className = 'gatebadge ' + gateText; }
+  else gb.textContent = '';
+}
+
+function addRunning(){
+  if(renderedCount >= STAGES.length) return;
+  setCard(renderedCount, 'running', '<div class="loading">运行中…</div>', null);
+}
+function addActions(){
+  thread.insertAdjacentHTML('beforeend',
+    '<div class="actions"><button class="btn primary" onclick="doNext()">下一步 →</button><button class="btn" onclick="doAuto()">全跑剩余 ⏩</button></div>');
+  scroll();
+}
+function addSummary(state){
+  const topics = state.topics||[], script = state.script||{}, an = state.analytics||{};
+  thread.insertAdjacentHTML('beforeend',
+    `<div class="card summary"><div class="head"><span class="icon">✓</span><span class="name">六步完成</span></div>
+     <div class="body">
+       <div class="line"><b>最优选题</b> · ${esc(topics[0]?.title||'（无选题）')}</div>
+       <div class="line"><b>脚本</b> · ${esc(script.duration||0)}s / ${(script.scenes||[]).length} 镜</div>
+       <div class="line"><b>分析</b> · ${esc(an.report||'')}</div>
+     </div></div>`);
+  CANDIDATES = state.candidate_videos || [];
+  if(CANDIDATES.length){
+    thread.insertAdjacentHTML('beforeend',
+      `<div class="card"><div class="head"><span class="icon">🎬</span><span class="name">候选视频（${CANDIDATES.length}）</span></div>
+       <div class="body">
+         ${CANDIDATES.map(c=>`<div class="line">· ${esc(c.title||'')} · <code>${esc(c.platform||'')}</code></div>`).join('')}
+         <button class="btn primary" onclick="reflowAll()">转录并 v2 回流</button>
+       </div></div>`);
+  }
+  scroll();
+}
+function addHalt(){
+  thread.insertAdjacentHTML('beforeend', '<div class="halt">🛑 质量门 HALT / 节点失败，进入人工兜底（human_gate）。</div>');
+  scroll();
+}
+
+async function reflowAll(){
+  if(!threadId){ addAgent('无会话'); return; }
+  const transcripts = {};
+  for(const c of CANDIDATES){
+    addAgent('🎙️ 转录中：'+c.title);
+    try{
+      const r = await (await fetch('/api/tool', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tool:'transcribe', kwargs:{source:c.url}})})).json();
+      if(r.allowed === false){ addAgent('⚠️ 转录被拒 '+c.title+'：'+r.reason); continue; }
+      transcripts[c.url] = (r.result||{}).text || '';
+    }catch(e){ addAgent('⚠️ 转录失败 '+c.title+'：'+e); }
+  }
+  if(!Object.values(transcripts).some(Boolean)){ addAgent('无成功转录，跳过 v2 回流。'); return; }
+  addAgent('♻️ v2 回流中…');
+  try{
+    const r = await (await fetch('/api/v2', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({thread_id:threadId, transcripts})})).json();
+    if(r.error){ addAgent('⚠️ '+r.error); return; }
+    renderV2(r);
+  }catch(e){ addAgent('❌ v2 回流失败：'+e); }
+}
+
+function renderV2(r){
+  const state = r.state||{}, script = state.script||{}, an = state.analytics||{};
+  thread.insertAdjacentHTML('beforeend',
+    `<div class="card summary"><div class="head"><span class="icon">♻️</span><span class="name">v2 回流</span></div>
+     <div class="body">
+       <div class="line"><b>脚本</b> · ${esc(script.duration||0)}s / ${(script.scenes||[]).length} 镜</div>
+       <div class="line"><b>分析</b> · ${esc(an.report||'')}</div>
+     </div></div>`);
+  scroll();
+}
+
+function renderResult(r){
+  const state = r.state||{}, gates = r.gates||{};
+  const failed = state.stage_status === 'failed';
+  for(let i=renderedCount; i<STAGES.length; i++){
+    const s = STAGES[i];
+    if(state[s.field] !== undefined){
+      setCard(i, 'done', (RENDER[s.field]||(()=>''))(state[s.field]), gates[s.node]);
+      renderedCount = i+1;
+    } else if(failed && r.stage === s.node){
+      setCard(i, 'error', `<div class="empty">❌ ${esc((state.errors||[]).join('; ')||'该步失败')}</div>`, null);
+      renderedCount = i+1;
+    } else break;
+  }
+  document.querySelectorAll('.actions').forEach(a=>a.remove());
+  if(r.halted){ addHalt(); return; }
+  if(r.done){ addSummary(state); return; }
+  addActions();
+}
+
+// 从 /api/state 快照渲染历史会话（所有已有产物的节点）
+function renderSnapshot(d){
+  const state = d.state||{}, gates = d.gates||{};
+  renderedCount = 0;
+  for(let i=0; i<STAGES.length; i++){
+    const s = STAGES[i];
+    if(state[s.field] !== undefined){
+      setCard(i, 'done', RENDER[s.field](state[s.field]), gates[s.node]);
+      renderedCount = i+1;
+    }
+  }
+  if(d.halted) addHalt();
+  else if(d.done) addSummary(state);
+  else addActions();
+}
+
+async function callRun(body){
+  const btn = document.getElementById('send'); btn.disabled = true;
+  addRunning();
+  try{
+    const res = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const r = await res.json();
+    threadId = r.thread_id;
+    renderResult(r);
+    loadSessions();
+  }catch(e){ addAgent('❌ 请求失败：'+e); }
+  finally{ btn.disabled = false; }
+}
+async function doStart(profile){
+  threadId=null; renderedCount=0;
+  const missing = await missingCookie();
+  if(missing.length){ renderLoginGuide(missing, profile); return; }
+  callRun({action:'start', profile, samples: attachment ? attachment.text : '', enabled:[...ENABLED]});
+}
+function doNext(){ if(!threadId){ addAgent('先输入账号画像启动'); return; } callRun({action:'next', thread_id:threadId}); }
+function doAuto(){ if(!threadId){ addAgent('先输入账号画像启动'); return; } callRun({action:'auto', thread_id:threadId}); }
+function reset(){ newTask(); }
+function newTask(){
+  mode='pipeline'; threadId=null; renderedCount=0; thread.innerHTML='';
+  title.textContent='新任务'; input.placeholder='输入账号画像，如「美妆博主」；或 继续 / 全跑';
+  input.value=''; autoGrow(); resetbtn.style.display=''; highlight();
+  addAgent('输入账号画像（如「美妆博主」）启动全流程；左侧点单个 Agent 单独运行；📎 上传 md 作风格样本 / 参考素材。');
+}
+
+function send(){
+  if(mode !== 'pipeline') return runAgent();
+  const t = input.value.trim(); if(!t) return; input.value=''; autoGrow();
+  if(/^(继续|下一步|next|go)$/i.test(t)) return doNext();
+  if(/^(全跑|自动|跑完|auto|finish)$/i.test(t)) return doAuto();
+  if(/^(重来|重置|清空|reset|clear)$/i.test(t)) return reset();
+  addUser(t); askConcierge(t);
+}
+
+// —— Concierge（C4）：自由格式默认对话对象，判意 → 答疑/反问/启动 ——
+async function askConcierge(t){
+  const body = {text: t};
+  if(threadId) body.thread_id = threadId;
+  try{
+    const r = await (await fetch('/api/concierge', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
+    if(r.kind === 'start_pipeline'){ doStart(r.profile || t); }
+    else addAgent(r.text || '');
+  }catch(e){ addAgent('❌ 请求失败：'+e); }
+}
+
+// —— 模式 / 高亮 ——
+function highlight(){
+  const target = mode==='pipeline' ? 'new' : mode;
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active', n.dataset.node===target));
+}
+function autoGrow(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,200)+'px'; }
+
+// —— 单 agent ——
+function renderGeneric(v){
+  return `<pre class="script-body" style="word-break:break-word">${esc(JSON.stringify(v ?? null, null, 2))}</pre>`;
+}
+function schemaExample(tool){
+  const props = (tool && tool.inputSchema && tool.inputSchema.properties) || {};
+  const ex = {};
+  for(const k in props){ if(props[k].default !== undefined) ex[k] = props[k].default; }
+  return ex;
+}
+function openAgent(node){
+  mode = node; threadId = null; thread.innerHTML = '';
+  const s = STAGES.find(x=>x.node===node);
+  const tool = TOOLS.find(t=>t.name===node);
+  const params = tool ? Object.keys(tool.inputSchema?.properties||{}) : [];
+  const isExt = !s;
+  const icon = s ? s.emoji : '🧩';
+  const label = s ? s.name : node;
+  title.textContent = label;
+  resetbtn.style.display = 'none';
+  highlight();
+  addAgent(icon+' '+label+(params.length?'（参数：'+params.join('、')+'）':'')+(isExt?' — 外部 skill，结果通用 JSON 展示':'')+'。下方输入 JSON 参数运行；点「新任务」回全流程。');
+  const ex = EXAMPLES[node] || schemaExample(tool);
+  input.placeholder = '输入 JSON 参数';
+  input.value = JSON.stringify(ex, null, 2);
+  autoGrow();
+}
+function addAgentLoading(id){
+  thread.insertAdjacentHTML('beforeend',
+    `<div class="card running" id="${id}"><div class="head"><span class="icon">⏳</span><span class="name">运行中</span><span class="badge running">运行中</span></div><div class="body"><div class="loading">运行中…</div></div></div>`);
+  scroll();
+}
+function setAgentCard(id, status, icon, name, bodyHTML){
+  const card = document.getElementById(id);
+  if(!card) return;
+  card.className = 'card ' + status;
+  card.querySelector('.head').innerHTML = `<span class="icon">${icon}</span><span class="name">${esc(name)}</span><span class="badge ${status}">${BADGE[status]}</span>`;
+  card.querySelector('.body').innerHTML = bodyHTML;
+  scroll();
+}
+async function runAgent(){
+  const node = mode, text = input.value.trim();
+  if(!text) return; input.value=''; autoGrow();
+  let kw;
+  try{ kw = JSON.parse(text); }
+  catch(e){ addAgent('❌ JSON 解析失败：'+esc(e.message)); return; }
+  const tool = TOOLS.find(t=>t.name===node);
+  const props = (tool && tool.inputSchema && tool.inputSchema.properties) || {};
+  if(attachment && 'samples' in props && kw.samples === undefined){ kw.samples = attachment.text; }
+  addUser(text);
+  const s = STAGES.find(x=>x.node===node);
+  const icon = s ? s.emoji : '🧩';
+  const label = s ? s.name : node;
+  const id = 'agent-'+Date.now();
+  addAgentLoading(id);
+  try{
+    const res = await fetch('/api/tool', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tool:node, kwargs:kw})});
+    const d = await res.json();
+    const body = s ? RENDER[s.field](d.result) : renderGeneric(d.result);
+    setAgentCard(id, 'done', icon, label, body);
+  }catch(e){ setAgentCard(id, 'error', icon, label, '<div class="empty">请求失败：'+esc(e)+'</div>'); }
+}
+
+// —— 会话历史 ——
+function stageLabel(stage){
+  const s = STAGES.find(x=>x.node===stage);
+  if(s) return s.emoji+' '+s.name;
+  if(stage==='human_gate') return '🛑 人工兜底';
+  return stage || '进行中';
+}
+async function loadSessions(){
+  try{
+    const res = await fetch('/api/sessions'); const list = await res.json();
+    const box = document.getElementById('sessions');
+    if(!list.length){ box.innerHTML = '<div class="sessions-empty">暂无会话</div>'; return; }
+    box.innerHTML = list.map(s=>
+      `<div class="session" onclick="openSession('${s.id}')">
+         <div class="s-top"><span class="s-profile">${esc(s.profile||'（无画像）')}</span><button class="s-del" onclick="event.stopPropagation();deleteSession('${s.id}')">×</button></div>
+         <div class="s-stage">${stageLabel(s.last_stage)}</div>
+       </div>`).join('');
+  }catch(e){ /* 静默：会话列表加载失败不阻塞 */ }
+}
+async function openSession(id){
+  try{
+    const res = await fetch('/api/state/'+id); const d = await res.json();
+    threadId = id; thread.innerHTML='';
+    addAgent('已恢复会话「'+(d.state.account_profile||'（无画像）')+'」，可点「下一步」继续。');
+    renderSnapshot(d);
+    mode='pipeline'; title.textContent='新任务'; resetbtn.style.display='';
+    input.placeholder='输入账号画像，如「美妆博主」；或 继续 / 全跑'; input.value=''; autoGrow(); highlight();
+  }catch(e){ addAgent('❌ 恢复失败：'+e); }
+}
+async function deleteSession(id){
+  await fetch('/api/sessions/'+id, {method:'DELETE'});
+  if(threadId===id){ threadId=null; }
+  loadSessions();
+}
+
+// 启动
+// —— 个人账号配置面板（D1）——
+let PROVIDERS = [];
+async function openConfig(){
+  let cfg = {};
+  try{ cfg = await (await fetch('/api/config')).json(); }catch(e){}
+  PROVIDERS = cfg.providers || [];
+  const sel = document.getElementById('c-provider');
+  sel.innerHTML = PROVIDERS.map(p=>`<option value="${esc(p.id)}" ${p.id===cfg.provider?'selected':''}>${esc(p.label)}</option>`).join('');
+  const jsel = document.getElementById('c-judge_provider');
+  jsel.innerHTML = '<option value="">复用主供应商</option>' + PROVIDERS.map(p=>`<option value="${esc(p.id)}" ${p.id===cfg.judge_provider?'selected':''}>${esc(p.label)}</option>`).join('');
+  document.getElementById('c-base_url').value = cfg.base_url||'';
+  document.getElementById('c-model').value = cfg.model||'';
+  document.getElementById('c-judge_base_url').value = cfg.judge_base_url||'';
+  const keyEl = document.getElementById('c-key');
+  keyEl.value = '';
+  keyEl.placeholder = cfg.key==='已配' ? '已配置（留空不改）' : 'sk-...';
+  document.getElementById('c-key-hint').textContent = cfg.key==='已配' ? '· 已配' : '· 未配';
+  const jkEl = document.getElementById('c-judge_key');
+  jkEl.value = '';
+  jkEl.placeholder = cfg.judge_key==='已配' ? '已配置（留空不改）' : '留空 = 复用主 key';
+  document.getElementById('c-judge_key_hint').textContent = cfg.judge_key==='已配' ? '· 已配' : '';
+  document.getElementById('cmask').hidden = false;
+  document.getElementById('cpanel').hidden = false;
+}
+function closeConfig(){
+  document.getElementById('cmask').hidden = true;
+  document.getElementById('cpanel').hidden = true;
+}
+function onProviderChange(){
+  const p = PROVIDERS.find(x=>x.id===document.getElementById('c-provider').value);
+  if(!p) return;
+  document.getElementById('c-base_url').value = p.base_url||'';
+  document.getElementById('c-model').value = p.model||'';
+}
+function onJudgeProviderChange(){
+  const p = PROVIDERS.find(x=>x.id===document.getElementById('c-judge_provider').value);
+  document.getElementById('c-judge_base_url').value = p ? (p.base_url||'') : '';
+}
+async function saveConfig(){
+  const body = {
+    provider: document.getElementById('c-provider').value,
+    base_url: document.getElementById('c-base_url').value.trim(),
+    model: document.getElementById('c-model').value.trim(),
+    key: document.getElementById('c-key').value.trim(),
+    judge_provider: document.getElementById('c-judge_provider').value,
+    judge_base_url: document.getElementById('c-judge_base_url').value.trim(),
+    judge_key: document.getElementById('c-judge_key').value.trim(),
+  };
+  const r = await (await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
+  closeConfig();
+  addAgent('✅ 已保存：'+esc(r.provider)+' / '+esc(r.model)+' · key '+esc(r.key)+' · judge '+esc(r.judge_key));
+}
+document.getElementById('c-provider').addEventListener('change', onProviderChange);
+document.getElementById('c-judge_provider').addEventListener('change', onJudgeProviderChange);
+
+function renderExtTools(){
+
+  const box = document.getElementById('exttools');
+  const ext = TOOLS.filter(t=>t.name.includes('.'));
+  if(!ext.length){ box.innerHTML = '<div class="sessions-empty">无外部 Skill</div>'; return; }
+  box.innerHTML = ext.map(t=>
+    `<div class="navitem" data-node="${esc(t.name)}" onclick="openAgent('${esc(t.name)}')">🧩 ${esc(t.name)}</div>`
+  ).join('');
+}
+async function init(){
+  try{ TOOLS = await (await fetch('/api/tools')).json(); }catch(e){}
+  renderExtTools();
+  loadSources();
+  loadSessions();
+  newTask();
+}
+document.getElementById('send').onclick = send;
+input.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+});
+input.addEventListener('input', autoGrow);
+document.getElementById('attachbtn').onclick = ()=>fileinput.click();
+fileinput.addEventListener('change', ()=>{
+  const f = fileinput.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ attachment = {name:f.name, text:String(r.result)}; renderAttach(); };
+  r.readAsText(f);
+});
+function renderAttach(){
+  if(!attachment){ attachinfo.hidden = true; attachinfo.innerHTML=''; return; }
+  attachinfo.hidden = false;
+  attachinfo.innerHTML = `📄 ${esc(attachment.name)}（${attachment.text.length} 字）<button onclick="clearAttach()">×</button>`;
+}
+function clearAttach(){ attachment=null; fileinput.value=''; renderAttach(); }
+init();
+</script>
+</body>
+</html>

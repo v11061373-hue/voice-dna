@@ -6,7 +6,10 @@ from src.tools import (
     script_writer,
     style_mimic,
     topic_planner,
+    transcribe,
     trend_hunter,
+    video_download,
+    video_vision,
 )
 
 TOOLS = {
@@ -16,4 +19,7 @@ TOOLS = {
     "script_writer": script_writer.run,
     "publish_optimizer": publish_optimizer.run,
     "data_analyst": data_analyst.run,
+    "transcribe": transcribe.run,
+    "video_download": video_download.run,
+    "video_vision": video_vision.run,
 }
