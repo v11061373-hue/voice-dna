@@ -336,8 +336,8 @@ let attachment = null;        // {name, text} | null（md 附件）
 
 // —— 数据源 chip 栏（A2）——
 const LS_KEY = 'vd.enabledSources';
-const SOURCE_LABELS = {bilibili:'B站', youtube:'YouTube', douyin:'抖音', weibo:'微博', search:'🔍 搜索召回'};
-const SRC_ICONS = {bilibili:'📺', youtube:'▶️', douyin:'🎵', weibo:'🔁', search:'🔍'};
+const SOURCE_LABELS = {bilibili:'B站', youtube:'YouTube', douyin:'抖音', weibo:'微博', xiaohongshu:'小红书', search:'搜索召回'};
+const SRC_ICONS = {bilibili:'📺', youtube:'▶️', douyin:'🎵', weibo:'🔁', xiaohongshu:'📕', search:'🔍'};
 let SOURCES = [];             // /api/sources 能力清单
 let ENABLED = new Set();      // 选中源名
 function renderSources(){
